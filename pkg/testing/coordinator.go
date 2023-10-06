@@ -24,6 +24,13 @@ func NewCoordinator(t *testing.T, chains ...*Chain) Coordinator {
 	}
 	return Coordinator{t: t, chains: chains}
 }
+func NewCoordinatorWithoutTest(chains ...*Chain) Coordinator {
+	// initialize the input data for the light clients
+	for _, chain := range chains {
+		chain.UpdateLCInputData()
+	}
+	return Coordinator{chains: chains}
+}
 
 func (c Coordinator) GetChain(idx int) *Chain {
 	return c.chains[idx]
@@ -43,6 +50,23 @@ func (coord *Coordinator) SetupClients(
 	clientB, err := coord.CreateClient(ctx, chainB, chainA, clientType)
 	require.NoError(coord.t, err)
 
+	return clientA, clientB
+}
+
+func (coord *Coordinator) SetupClientsWithoutTest(
+	ctx context.Context,
+	chainA, chainB *Chain,
+	clientType string,
+) (string, string) {
+
+	clientA, err := coord.CreateClient(ctx, chainA, chainB, clientType)
+	if err != nil {
+		fmt.Println(err)
+	}
+	clientB, err := coord.CreateClient(ctx, chainB, chainA, clientType)
+	if err != nil {
+		fmt.Println(err)
+	}
 	return clientA, clientB
 }
 
@@ -130,6 +154,24 @@ func (c *Coordinator) CreateConnection(
 	return connA, connB
 }
 
+func (c *Coordinator) CreateConnectionWithoutTest(
+	ctx context.Context,
+	chainA, chainB *Chain,
+	clientA, clientB string,
+) (*TestConnection, *TestConnection) {
+
+	connA, connB, err := c.ConnOpenInit(ctx, chainA, chainB, clientA, clientB)
+	if err != nil {
+		fmt.Println(err)
+	}
+
+	c.ConnOpenTry(ctx, chainB, chainA, connB, connA)
+	c.ConnOpenAck(ctx, chainA, chainB, connA, connB)
+	c.ConnOpenConfirm(ctx, chainB, chainA, connB, connA)
+
+	return connA, connB
+}
+
 // CreateChannel constructs and executes channel handshake messages in order to create
 // OPEN channels on chainA and chainB. The function expects the channels to be successfully
 // opened otherwise testing will fail.
@@ -152,6 +194,37 @@ func (c *Coordinator) CreateChannel(
 
 	err = c.ChanOpenConfirm(ctx, chainB, chainA, channelB, channelA)
 	require.NoError(c.t, err)
+
+	return channelA, channelB
+}
+
+func (c *Coordinator) CreateChannelWithoutTest(
+	ctx context.Context,
+	chainA, chainB *Chain,
+	connA, connB *TestConnection,
+	sourcePortID, counterpartyPortID string,
+	order channeltypes.Channel_Order,
+) (TestChannel, TestChannel) {
+
+	channelA, channelB, err := c.ChanOpenInit(ctx, chainA, chainB, connA, connB, sourcePortID, counterpartyPortID, order)
+	if err != nil {
+		fmt.Println(err)
+	}
+
+	err = c.ChanOpenTry(ctx, chainB, chainA, &channelB, &channelA, connB, order)
+	if err != nil {
+		fmt.Println(err)
+	}
+
+	err = c.ChanOpenAck(ctx, chainA, chainB, channelA, channelB)
+
+	if err != nil {
+		fmt.Println(err)
+	}
+	err = c.ChanOpenConfirm(ctx, chainB, chainA, channelB, channelA)
+	if err != nil {
+		fmt.Println(err)
+	}
 
 	return channelA, channelB
 }
@@ -459,6 +532,19 @@ func (c *Coordinator) RelayLastSentPacket(
 	require.NoError(c.t, err)
 	require.NoError(c.t, c.HandlePacketRecv(ctx, counterparty, source, counterpartyChannel, sourceChannel, *packet))
 	require.NoError(c.t, c.HandlePacketAcknowledgement(ctx, source, counterparty, sourceChannel, counterpartyChannel, *packet, []byte{1}))
+}
+
+func (c *Coordinator) RelayLastSentPacketWithoutTest(
+	ctx context.Context,
+	source, counterparty *Chain,
+	sourceChannel, counterpartyChannel TestChannel,
+) {
+	packet, err := source.GetLastSentPacket(ctx, sourceChannel.PortID, sourceChannel.ID)
+	if err != nil {
+		fmt.Println(err)
+	}
+	c.HandlePacketRecv(ctx, counterparty, source, counterpartyChannel, sourceChannel, *packet)
+	c.HandlePacketAcknowledgement(ctx, source, counterparty, sourceChannel, counterpartyChannel, *packet, []byte{1})
 }
 
 func (c *Coordinator) RelayLastSentPacketWithDelay(

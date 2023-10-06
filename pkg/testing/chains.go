@@ -165,7 +165,68 @@ func NewChain(t *testing.T, client *client.ETHClient, lc *LightClient, isAutoMin
 		ICS20Bank:     *ics20bank,
 	}
 }
+func NewChainWithoutTest(client *client.ETHClient, lc *LightClient, isAutoMining bool) *Chain {
+	mnemonic := "math razor capable expose worth grape metal sunset metal sudden usage scheme"
 
+	if mnemonic == "" {
+		fmt.Println("environ variable 'TEST_MNEMONIC' is empty")
+	}
+	logDir := "./broadcast/Deploy.s.sol"
+	if logDir == "" {
+		fmt.Println("environ variable 'TEST_BROADCAST_LOG_DIR' is empty")
+	}
+	chainID, err := client.ChainID(context.TODO())
+	if err != nil {
+		fmt.Println(err)
+	}
+	config, err := buildContractConfigFromBroadcastLog(filepath.Join(logDir, chainID.String(), "run-latest.json"))
+	if err != nil {
+		fmt.Println(err)
+	}
+	ibcHandler, err := ibchandler.NewIbchandler(config.IBCHandlerAddress, client)
+	if err != nil {
+		fmt.Println(err)
+	}
+	ibcCommitment, err := ibccommitment.NewIbccommitmenttesthelper(config.IBCCommitmentTestHelperAddress, client)
+	if err != nil {
+		fmt.Println(err)
+	}
+	erc20_, err := erc20.NewErc20(config.ERC20TokenAddress, client)
+	if err != nil {
+		fmt.Println(err)
+	}
+	ics20transfer, err := ics20transferbank.NewIcs20transferbank(config.ICS20TransferBankAddress, client)
+	if err != nil {
+		fmt.Println(err)
+	}
+	ics20bank, err := ics20bank.NewIcs20bank(config.ICS20BankAddress, client)
+	if err != nil {
+		fmt.Println(err)
+	}
+	startBlockNumber, err := client.BlockNumber(context.TODO())
+	if err != nil {
+		fmt.Println(err)
+	}
+
+	return &Chain{
+		client:           client,
+		chainID:          chainID.Int64(),
+		lc:               lc,
+		delayPeriod:      DefaultDelayPeriod,
+		mnemonic:         mnemonic,
+		ContractConfig:   *config,
+		keys:             make(map[uint32]*ecdsa.PrivateKey),
+		isAutoMining:     isAutoMining,
+		startBlockNumber: big.NewInt(int64(startBlockNumber)),
+
+		IBCHandler:    *ibcHandler,
+		IBCCommitment: *ibcCommitment,
+
+		ERC20:         *erc20_,
+		ICS20Transfer: *ics20transfer,
+		ICS20Bank:     *ics20bank,
+	}
+}
 func (chain *Chain) SetDelayPeriod(delayPeriod uint64) {
 	chain.delayPeriod = delayPeriod
 }
@@ -186,8 +247,21 @@ func (chain *Chain) TxOpts(ctx context.Context, index uint32) *bind.TransactOpts
 	return makeGenTxOpts(big.NewInt(chain.chainID), chain.prvKey(index))(ctx)
 }
 
+func (chain *Chain) TxOptsFromPrvKey(ctx context.Context, prvKey *ecdsa.PrivateKey) *bind.TransactOpts {
+
+	return makeGenTxOpts(big.NewInt(chain.chainID), prvKey)(ctx)
+}
+
 func (chain *Chain) CallOpts(ctx context.Context, index uint32) *bind.CallOpts {
 	opts := chain.TxOpts(ctx, index)
+	return &bind.CallOpts{
+		From:    opts.From,
+		Context: opts.Context,
+	}
+}
+
+func (chain *Chain) CallOptsFromPrvKey(ctx context.Context, prvKey *ecdsa.PrivateKey) *bind.CallOpts {
+	opts := chain.TxOptsFromPrvKey(ctx, prvKey)
 	return &bind.CallOpts{
 		From:    opts.From,
 		Context: opts.Context,

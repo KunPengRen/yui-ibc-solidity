@@ -173,9 +173,9 @@ func (suite *ChainTestSuite) TestPacketRelayWithDelay() {
 	suite.Require().NoError(err)
 
 	chainA := ibctesting.NewChain(suite.T(), ethClA, ibctesting.NewLightClient(ethClA, clienttypes.BesuIBFT2Client), true)
-	chainA.SetDelayPeriod(3 * ibctesting.BlockTime)
+	chainA.SetDelayPeriod(1 * ibctesting.BlockTime)
 	chainB := ibctesting.NewChain(suite.T(), ethClB, ibctesting.NewLightClient(ethClB, clienttypes.BesuIBFT2Client), true)
-	chainB.SetDelayPeriod(3 * ibctesting.BlockTime)
+	chainB.SetDelayPeriod(1 * ibctesting.BlockTime)
 	coordinator := ibctesting.NewCoordinator(suite.T(), chainA, chainB)
 
 	clientA, clientB := coordinator.SetupClients(ctx, chainA, chainB, clienttypes.BesuIBFT2Client)
